@@ -1,0 +1,63 @@
+{
+  "version": 3,
+  "permissions": [
+    {
+      "resource": "claims",
+      "component": "expense-api",
+      "description": "Expense claims and their review lifecycle",
+      "actions": [
+        { "handle": "read", "description": "The caller's own claims" },
+        { "handle": "submit", "description": "Create or resubmit the caller's own claim" },
+        { "handle": "read-team", "description": "Claims submitted by the caller's reports" },
+        { "handle": "decide-manager", "description": "Approve or reject a report's claim as manager" },
+        { "handle": "read-all", "description": "Every claim" },
+        { "handle": "decide-finance", "description": "Approve or reject a manager-approved claim as finance" },
+        { "handle": "export", "description": "Generate a payroll export batch of finance-approved claims" }
+      ]
+    },
+    {
+      "resource": "employees",
+      "component": "expense-api",
+      "description": "Employee directory and manager assignments",
+      "actions": [
+        { "handle": "read", "description": "List employees and their manager assignment" },
+        { "handle": "manage", "description": "Set or change an employee's manager" }
+      ]
+    }
+  ],
+  "groups": [
+    { "name": "Employees", "description": "Everyone who submits expense claims" },
+    { "name": "Managers", "description": "People who approve or reject their reports' claims" },
+    { "name": "Finance", "description": "Finance staff who give the final review and export to payroll" }
+  ],
+  "roles": [
+    {
+      "name": "Employee",
+      "description": "Submits expense claims and tracks their status.",
+      "stories": [1, 2, 3],
+      "grants": ["claims:read", "claims:submit", "employees:read"],
+      "assignTo": ["Employees"]
+    },
+    {
+      "name": "LineManager",
+      "description": "Reviews and decides claims submitted by their reports.",
+      "stories": [4, 5],
+      "grants": ["claims:read", "claims:submit", "claims:read-team", "claims:decide-manager", "employees:read"],
+      "assignTo": ["Managers"]
+    },
+    {
+      "name": "FinanceReviewer",
+      "description": "Gives the final review, exports payroll batches, and maintains manager assignments.",
+      "stories": [6, 7, 8, 9, 10],
+      "grants": ["claims:read-all", "claims:decide-finance", "claims:export", "employees:read", "employees:manage"],
+      "assignTo": ["Finance"]
+    }
+  ],
+  "testUsers": [
+    { "username": "test-employee", "roles": ["Employee"] },
+    { "username": "test-employee-2", "roles": ["Employee"] },
+    { "username": "test-linemanager", "roles": ["LineManager"] },
+    { "username": "test-linemanager-2", "roles": ["LineManager"] },
+    { "username": "test-financereviewer", "roles": ["FinanceReviewer"] }
+  ]
+}
