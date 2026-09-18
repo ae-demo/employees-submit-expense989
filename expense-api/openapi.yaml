@@ -1,0 +1,518 @@
+openapi: 3.0.3
+info:
+  title: Expense API
+  version: 0.1.0
+  description: Expense claim submission, manager and finance review, employee-manager directory, and payroll export.
+servers:
+  - url: /
+paths:
+  /me:
+    get:
+      operationId: getMe
+      summary: The caller's own employee profile
+      responses:
+        '200':
+          description: The caller's profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employee' }
+
+  /employees:
+    get:
+      operationId: listEmployees
+      summary: Every employee and their manager assignment
+      security:
+        - oauth2: [employees:read]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: A page of employees
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Employee' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /employees/{employeeId}/manager:
+    patch:
+      operationId: setEmployeeManager
+      summary: Set or change an employee's manager
+      security:
+        - oauth2: [employees:manage]
+      parameters:
+        - { name: employeeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [managerId]
+              properties:
+                managerId: { type: string }
+      responses:
+        '200':
+          description: The updated employee
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employee' }
+        '400':
+          description: Invalid manager assignment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Employee not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/claims:
+    get:
+      operationId: listMyClaims
+      summary: The caller's own claims
+      security:
+        - oauth2: [claims:read]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: A page of the caller's claims
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExpenseClaim' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    post:
+      operationId: submitClaim
+      summary: Submit a new expense claim
+      security:
+        - oauth2: [claims:submit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpenseClaimInput' }
+      responses:
+        '201':
+          description: The submitted claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Invalid claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/claims/{claimId}:
+    get:
+      operationId: getMyClaim
+      summary: One of the caller's own claims
+      security:
+        - oauth2: [claims:read]
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    put:
+      operationId: resubmitMyClaim
+      summary: Edit and resubmit a rejected claim
+      security:
+        - oauth2: [claims:submit]
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpenseClaimInput' }
+      responses:
+        '200':
+          description: The resubmitted claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Invalid claim, or the claim is not rejected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/team/claims:
+    get:
+      operationId: listTeamClaims
+      summary: Claims submitted by the caller's reports
+      security:
+        - oauth2: [claims:read-team]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: A page of the reports' claims
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExpenseClaim' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/team/claims/{claimId}/approve:
+    post:
+      operationId: approveTeamClaim
+      summary: Approve a report's claim as manager
+      security:
+        - oauth2: [claims:decide-manager]
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The manager-approved claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Claim is not awaiting manager review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/team/claims/{claimId}/reject:
+    post:
+      operationId: rejectTeamClaim
+      summary: Reject a report's claim as manager
+      security:
+        - oauth2: [claims:decide-manager]
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string }
+      responses:
+        '200':
+          description: The rejected claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Claim is not awaiting manager review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /claims:
+    get:
+      operationId: listAllClaims
+      summary: Every claim
+      security:
+        - oauth2: [claims:read-all]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: A page of every claim
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExpenseClaim' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /claims/{claimId}/approve:
+    post:
+      operationId: approveClaim
+      summary: Approve a manager-approved claim as finance
+      security:
+        - oauth2: [claims:decide-finance]
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The finance-approved claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Claim is not awaiting finance review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /claims/{claimId}/reject:
+    post:
+      operationId: rejectClaim
+      summary: Reject a manager-approved claim as finance
+      security:
+        - oauth2: [claims:decide-finance]
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string }
+      responses:
+        '200':
+          description: The rejected claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Claim is not awaiting finance review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /claims/export:
+    post:
+      operationId: exportClaims
+      summary: Generate a payroll export batch of finance-approved claims
+      security:
+        - oauth2: [claims:export]
+      responses:
+        '201':
+          description: The generated export batch, with its claims marked exported
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportBatch' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /export-batches:
+    get:
+      operationId: listExportBatches
+      summary: Past payroll export batches
+      security:
+        - oauth2: [claims:export]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: A page of export batches
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExportBatch' }
+        '401':
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: /oauth2/authorize
+          tokenUrl: /oauth2/token
+          scopes:
+            claims:read: The caller's own claims
+            claims:submit: Create or resubmit the caller's own claim
+            claims:read-team: Claims submitted by the caller's reports
+            claims:decide-manager: Approve or reject a report's claim as manager
+            claims:read-all: Every claim
+            claims:decide-finance: Approve or reject a manager-approved claim as finance
+            claims:export: Generate a payroll export batch
+            employees:read: List employees and their manager assignment
+            employees:manage: Set or change an employee's manager
+  schemas:
+    Employee:
+      type: object
+      required: [id, name, email]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        managerId: { type: string, nullable: true }
+    ExpenseClaimInput:
+      type: object
+      required: [amount, category, expenseDate, description]
+      properties:
+        amount: { type: number, format: double }
+        category: { type: string, enum: [Travel, Meals, Lodging, Other] }
+        expenseDate: { type: string, format: date }
+        description: { type: string }
+        receiptRef: { type: string, nullable: true, description: reference to the attached receipt file }
+    ExpenseClaim:
+      type: object
+      required: [id, employeeId, amount, category, expenseDate, description, status, exported, submittedAt]
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        amount: { type: number, format: double }
+        category: { type: string, enum: [Travel, Meals, Lodging, Other] }
+        expenseDate: { type: string, format: date }
+        description: { type: string }
+        receiptRef: { type: string, nullable: true }
+        status: { type: string, enum: [submitted, manager-approved, finance-approved, rejected] }
+        managerComment: { type: string, nullable: true }
+        financeComment: { type: string, nullable: true }
+        exported: { type: boolean }
+        submittedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ExportBatch:
+      type: object
+      required: [id, generatedAt, claimCount]
+      properties:
+        id: { type: string }
+        generatedAt: { type: string, format: date-time }
+        claimCount: { type: integer }
+        downloadUrl: { type: string, description: relative URI to download the CSV file }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: integer, description: HTTP or application error code }
+        message: { type: string, description: short human-readable label }
+        description: { type: string, description: detailed explanation }
+        moreInfo: { type: string, description: URI to documentation }
+security:
+  - oauth2: []
